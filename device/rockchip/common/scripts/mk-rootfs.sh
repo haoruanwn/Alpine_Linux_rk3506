@@ -27,7 +27,7 @@ build_alpine()
     local rootfs_img="$image_dir/rootfs.$fs_type"
     local rootfs_target="$RK_OUTDIR/alpine/target"
     local alpine_url="https://mirrors.aliyun.com/alpine/v3.19/releases/armv7/alpine-minirootfs-3.19.1-armv7.tar.gz"
-    local alpine_tar="$RK_SDK_DIR/alpine-minirootfs.tar.gz"
+    local alpine_tar="$RK_SDK_DIR/alpine/alpine-minirootfs.tar.gz"
 
     message "Target RootFS Image: $rootfs_img"
     message "Target RootFS Directory: $rootfs_target"
