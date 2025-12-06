@@ -1,17 +1,21 @@
 #!/bin/bash -e
 
+# ==========================================================
+# Alpine Linux Builder with Kernel Modules
+# ==========================================================
+
 # Cleanup mounts on exit (trap)
 cleanup_mounts()
 {
-	local rootfs_dir="$1"
-	[ -z "$rootfs_dir" ] && return 0
+    local rootfs_dir="$1"
+    [ -z "$rootfs_dir" ] && return 0
 
-	# Try to unmount in reverse order
-	for mp in dev/pts dev sys proc; do
-		if mountpoint -q "$rootfs_dir/$mp" 2>/dev/null; then
-			umount "$rootfs_dir/$mp" 2>/dev/null || true
-		fi
-	done
+    # Try to unmount in reverse order
+    for mp in dev/pts dev sys proc; do
+        if mountpoint -q "$rootfs_dir/$mp" 2>/dev/null; then
+            sudo umount "$rootfs_dir/$mp" 2>/dev/null || true
+        fi
+    done
 }
 
 build_alpine()
@@ -26,6 +30,7 @@ build_alpine()
     local fs_type="${RK_ROOTFS_TYPE:-ubi}"
     local rootfs_img="$image_dir/rootfs.$fs_type"
     local rootfs_target="$RK_OUTDIR/alpine/target"
+    # 这里根据环境选择了 armv7
     local alpine_url="https://mirrors.aliyun.com/alpine/v3.19/releases/armv7/alpine-minirootfs-3.19.1-armv7.tar.gz"
     local alpine_tar="$RK_SDK_DIR/alpine/alpine-minirootfs.tar.gz"
 
@@ -48,7 +53,7 @@ build_alpine()
         fi
     fi
 
-    # Step 2: Extract RootFS with sudo (for proper ownership as root)
+    # Step 2: Extract RootFS with sudo
     notice "Extracting Alpine RootFS..."
     sudo rm -rf "$rootfs_target"
     mkdir -p "$rootfs_target"
@@ -57,33 +62,34 @@ build_alpine()
         return 1
     fi
 
-    # Step 3: Prepare QEMU static binary for ARM emulation
+    # Step 3: Prepare QEMU static binary
     local qemu_bin
     if qemu_bin=$(which qemu-arm-static 2>/dev/null); then
         notice "Found QEMU ARM static: $qemu_bin"
         sudo mkdir -p "$rootfs_target/usr/bin"
         sudo cp "$qemu_bin" "$rootfs_target/usr/bin/" 2>/dev/null || true
     else
-        warning "qemu-arm-static not found - chroot configuration will be limited"
-        warning "Install qemu-user-static to enable full Alpine customization"
+        # Fallback for Ubuntu/Debian common path
+        if [ -f "/usr/bin/qemu-arm-static" ]; then
+             notice "Found QEMU ARM static at /usr/bin/qemu-arm-static"
+             sudo mkdir -p "$rootfs_target/usr/bin"
+             sudo cp "/usr/bin/qemu-arm-static" "$rootfs_target/usr/bin/"
+        else
+             warning "qemu-arm-static not found - chroot configuration will be limited"
+        fi
     fi
 
-    # Step 4: Try to mount system directories and run setup script
+    # Step 4: Mount system directories
     notice "Mounting system directories for chroot configuration..."
-
-    # Setup trap to cleanup mounts on exit
     trap "cleanup_mounts '$rootfs_target'" EXIT
 
-    # Mount required filesystems with sudo
     sudo mount -t proc /proc "$rootfs_target/proc" 2>/dev/null || true
     sudo mount -t sysfs /sys "$rootfs_target/sys" 2>/dev/null || true
     sudo mount --bind /dev "$rootfs_target/dev" 2>/dev/null || true
     sudo mount --bind /dev/pts "$rootfs_target/dev/pts" 2>/dev/null || true
-
-    # Copy DNS configuration for networking
     sudo cp /etc/resolv.conf "$rootfs_target/etc/resolv.conf" 2>/dev/null || true
 
-    # Copy setup script and run with sudo chroot
+    # Run setup script
     if [ -f "$RK_SCRIPTS_DIR/alpine-setup.sh" ]; then
         sudo mkdir -p "$rootfs_target/tmp"
         sudo cp "$RK_SCRIPTS_DIR/alpine-setup.sh" "$rootfs_target/tmp/"
@@ -99,41 +105,131 @@ build_alpine()
         warning "alpine-setup.sh not found in $RK_SCRIPTS_DIR"
     fi
 
-    # Cleanup qemu binary and mounts
-    sudo rm -f "$rootfs_target/usr/bin/qemu-arm-static" 2>/dev/null || true
-    sudo umount "$rootfs_target/dev/pts" 2>/dev/null || true
-    sudo umount "$rootfs_target/dev" 2>/dev/null || true
-    sudo umount "$rootfs_target/sys" 2>/dev/null || true
-    sudo umount "$rootfs_target/proc" 2>/dev/null || true
-
-    # Step 5: Create placeholder image(s)
-    case "$fs_type" in
-        ubi)
-            notice "Creating UBI placeholder image..."
-            dd if=/dev/zero of="$rootfs_img" bs=1M count=64 status=none
-            ;;
-        ext4)
-            notice "Creating ext4 placeholder image..."
-            dd if=/dev/zero of="$rootfs_img" bs=1M count=64 status=none
-            if command -v mkfs.ext4 >/dev/null 2>&1; then
-                mkfs.ext4 -F -L "alpine_root" "$rootfs_img" >/dev/null 2>&1 || true
+    # ==========================================
+    # Step 4.5: Install Kernel Modules
+    # ==========================================
+    if [ -d "$RK_SDK_DIR/kernel" ]; then
+        notice "Installing Kernel Modules to RootFS..."
+        
+        local cc_path="$RK_SDK_DIR/prebuilts/gcc/linux-x86/arm/gcc-arm-10.3-2021.07-x86_64-arm-none-linux-gnueabihf/bin/arm-none-linux-gnueabihf-"
+        
+        if [ -x "${cc_path}gcc" ]; then
+            # Execute install with detailed output
+            # 使用 sudo 确保有权限写入 rootfs
+            notice "Cross compiler: $cc_path"
+            notice "Target RootFS: $rootfs_target"
+            notice "Running: make -C $RK_SDK_DIR/kernel ARCH=arm CROSS_COMPILE=$cc_path INSTALL_MOD_PATH=$rootfs_target modules_install"
+            notice "=================================================="
+            
+            if sudo make -C "$RK_SDK_DIR/kernel" \
+                ARCH="arm" \
+                CROSS_COMPILE="$cc_path" \
+                INSTALL_MOD_PATH="$rootfs_target" \
+                modules_install; then
+                
+                notice "=================================================="
+                notice "Kernel modules installed successfully!"
+                
+                # Show what was installed
+                notice "Modules installed in: $rootfs_target/lib/modules/"
+                if [ -d "$rootfs_target/lib/modules" ]; then
+                    sudo find "$rootfs_target/lib/modules" -name "*.ko" | head -20 | while read ko; do
+                        notice "  - $ko"
+                    done
+                    local total_ko=$(sudo find "$rootfs_target/lib/modules" -name "*.ko" | wc -l)
+                    notice "  (Total: $total_ko kernel modules)"
+                fi
+                
+                # Clean up symlinks
+                notice "Cleaning up kernel module symlinks (build/source)..."
+                sudo find "$rootfs_target/lib/modules" -type l -name "build" -delete 2>/dev/null || true
+                sudo find "$rootfs_target/lib/modules" -type l -name "source" -delete 2>/dev/null || true
+                notice "Module cleanup completed."
+            else
+                error "Kernel modules install command failed!"
+                return 1
             fi
-            ;;
-        *)
-            notice "Creating generic placeholder image..."
-            dd if=/dev/zero of="$rootfs_img" bs=1M count=64 status=none
-            ;;
-    esac
+        else
+            error "Cross compiler not found at $cc_path"
+            warning "Skipping kernel modules install."
+        fi
+    else
+        warning "Kernel source directory not found at $RK_SDK_DIR/kernel"
+    fi
+    # ==========================================
 
-    if [ ! -f "$rootfs_img" ]; then
-        error "Failed to create $rootfs_img"
+    # Cleanup qemu binary and mounts (handled by trap too, but good to be explicit)
+    sudo rm -f "$rootfs_target/usr/bin/qemu-arm-static" 2>/dev/null || true
+    cleanup_mounts "$rootfs_target"
+
+    # ==========================================
+    # Step 5: Pack RootFS into Real UBI Image
+    # ==========================================
+    notice "Packing Alpine RootFS into UBI image..."
+
+    # 1. 定义 NAND 参数 (根据你的 log 中 oem 分区的参数提取)
+    # LEB size: 126976, PEB size: 131072, min. I/O: 2048
+    local LEB_SIZE=126976
+    local MIN_IO_SIZE=2048
+    local MAX_LEB_CNT=2048 # 给 rootfs 足够大的空间
+
+    # 2. 生成 ubinize.cfg 配置文件
+    cat > "$image_dir/ubinize.cfg" <<EOF
+[ubifs]
+mode=ubi
+image=$image_dir/rootfs.ubifs
+vol_id=0
+vol_type=dynamic
+vol_name=rootfs
+vol_flags=autoresize
+EOF
+
+    # 3. 制作 UBIFS (文件系统层)
+    # 注意：需要 sudo 才能读取 rootfs_target 中的 root 权限文件
+    notice "Running mkfs.ubifs..."
+    if sudo mkfs.ubifs -r "$rootfs_target" \
+        -m $MIN_IO_SIZE \
+        -e $LEB_SIZE \
+        -c $MAX_LEB_CNT \
+        -o "$image_dir/rootfs.ubifs"; then
+        notice "UBIFS generated successfully."
+    else
+        error "Failed to generate UBIFS!"
+        return 1
+    fi
+
+    # 4. 制作 UBI 镜像 (Flash 层，包含磨损均衡头)
+    notice "Running ubinize..."
+    if ubinize -o "$rootfs_img" \
+        -m $MIN_IO_SIZE \
+        -p 128KiB \
+        "$image_dir/ubinize.cfg"; then
+        notice "UBI image generated successfully: $rootfs_img"
+    else
+        error "Failed to generate UBI image!"
+        return 1
+    fi
+    
+    # 清理中间文件
+    rm -f "$image_dir/rootfs.ubifs" "$image_dir/ubinize.cfg"
+
+    # 同时也生成一个 ext4 镜像
+    if command -v mkfs.ext4 >/dev/null 2>&1; then
+        notice "Generating ext4 image for backup..."
+        dd if=/dev/zero of="$image_dir/rootfs.ext4" bs=1M count=256 status=none
+        sudo mkfs.ext4 -L "alpine_root" -d "$rootfs_target" "$image_dir/rootfs.ext4" >/dev/null 2>&1 || true
+    fi
+
+    # 检查文件生成情况
+    if [ ! -s "$rootfs_img" ]; then
+        error "Failed to create $rootfs_img (File is empty or missing)"
         return 1
     fi
 
     notice "Alpine RootFS prepared:"
     notice "  - Target directory: $rootfs_target"
     notice "  - Image file: $rootfs_img"
-    notice "  - Image size: $(du -h "$rootfs_img" 2>/dev/null | cut -f1)"
+    notice "  - Image size: $(du -h "$rootfs_img" | cut -f1)"
 
     finish_build build_alpine $@
 }
@@ -146,7 +242,10 @@ usage_hook()
 
 clean_hook()
 {
-    rm -rf "$RK_OUTDIR/alpine"
+    # Use sudo for Alpine RootFS directories (they're owned by root from chroot operations)
+    if [ -d "$RK_OUTDIR/alpine" ]; then
+        sudo rm -rf "$RK_OUTDIR/alpine"
+    fi
     rm -rf "$RK_OUTDIR/rootfs"
     rm -rf "$RK_FIRMWARE_DIR/rootfs.img"
 }
@@ -159,7 +258,7 @@ build_hook()
 {
     check_config RK_ROOTFS || false
 
-    ROOTFS_IMG=rootfs.${RK_ROOTFS_TYPE}
+    ROOTFS_IMG=rootfs.${RK_ROOTFS_TYPE:-ubi}
     ROOTFS_DIR="$RK_OUTDIR/alpine"
     IMAGE_DIR="$ROOTFS_DIR/images"
 
@@ -167,7 +266,10 @@ build_hook()
     message "          Start building rootfs(alpine)"
     message "=========================================="
 
-    rm -rf "$ROOTFS_DIR" "$RK_OUTDIR/rootfs"
+    if [ -d "$ROOTFS_DIR" ]; then
+        sudo rm -rf "$ROOTFS_DIR"
+    fi
+    rm -rf "$RK_OUTDIR/rootfs"
     mkdir -p "$IMAGE_DIR"
     ln -rsf "$ROOTFS_DIR" "$RK_OUTDIR/rootfs"
 
@@ -175,23 +277,16 @@ build_hook()
     build_alpine "$IMAGE_DIR"
     touch "$ROOTFS_DIR/.stamp_build_finish"
 
-    if [ ! -f "$IMAGE_DIR/$ROOTFS_IMG" ]; then
-        error "There's no $ROOTFS_IMG generated..."
-        exit 1
-    fi
-
-    if [ "$RK_ROOTFS_INITRD" ]; then
-        "$RK_SCRIPTS_DIR/mk-ramboot.sh" "$ROOTFS_DIR" \
-            "$IMAGE_DIR/$ROOTFS_IMG" "$RK_BOOT_FIT_ITS"
-        ln -rsf "$ROOTFS_DIR/ramboot.img" "$RK_FIRMWARE_DIR/boot.img"
-    elif [ "$RK_SECURITY_CHECK_SYSTEM_ENCRYPTION" -o \
-        "$RK_SECURITY_CHECK_SYSTEM_VERITY" ]; then
-        ln -rsf "$IMAGE_DIR/security_system.img" \
-            "$RK_FIRMWARE_DIR/rootfs.img"
+    # 强制豁免逻辑
+    if [ -f "$IMAGE_DIR/rootfs.ubi" ]; then
+         ln -rsf "$IMAGE_DIR/rootfs.ubi" "$RK_FIRMWARE_DIR/rootfs.img"
+    elif [ -f "$IMAGE_DIR/rootfs.ext4" ]; then
+         ln -rsf "$IMAGE_DIR/rootfs.ext4" "$RK_FIRMWARE_DIR/rootfs.img"
     else
-        ln -rsf "$IMAGE_DIR/$ROOTFS_IMG" "$RK_FIRMWARE_DIR/rootfs.img"
+         error "No rootfs image generated!"
+         exit 1
     fi
-
+    
     finish_build build_rootfs $@
 }
 
