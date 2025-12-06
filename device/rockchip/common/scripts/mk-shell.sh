@@ -5,11 +5,9 @@
 usage_hook()
 {
 	usage_oneline "shell" "setup a shell for developing"
-	usage_oneline "buildroot-shell" "setup a shell for buildroot developing"
-	usage_oneline "bshell" "alias of buildroot-shell"
 }
 
-PRE_BUILD_CMDS="shell buildroot-shell bshell"
+PRE_BUILD_CMDS="shell"
 pre_build_hook()
 {
 	warning "Doing this is dangerous and for developing only."
@@ -17,14 +15,6 @@ pre_build_hook()
 	set +e; trap ERR
 
 	case "${1:-shell}" in
-		buildroot-shell | bshell)
-			BUILDROOT_DIR="$RK_SDK_DIR/buildroot"
-			BUILDROOT_CFG="${2:-$RK_BUILDROOT_CFG}"
-			/bin/bash -c "cd $BUILDROOT_DIR; \
-				source envsetup.sh ${BUILDROOT_CFG}_defconfig; \
-				PS1='\u@\h:\w ($BUILDROOT_CFG)\$ ' \
-				/bin/bash -norc"
-			;;
 		*) PS1="\u@\h:\w (rksdk)\$ " /bin/bash --norc ;;
 	esac
 

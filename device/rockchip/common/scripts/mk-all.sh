@@ -33,17 +33,11 @@ build_all()
 build_release()
 {
 	message "=========================================="
-	message "          Start releasing images and build info"
-	message "=========================================="
-
-	shift
 	RELEASE_BASE_DIR="$RK_OUTDIR/releases/${1:+$1/}${2:-$BOARD}"
 	case "$(readlink "$RK_OUTDIR/rootfs")" in
-		buildroot) RELEASE_DIR="$RELEASE_BASE_DIR/BUILDROOT" ;;
-		debian) RELEASE_DIR="$RELEASE_BASE_DIR/DEBIAN" ;;
-		yocto) RELEASE_DIR="$RELEASE_BASE_DIR/YOCTO" ;;
+		alpine) RELEASE_DIR="$RELEASE_BASE_DIR/ALPINE" ;;
 		*) RELEASE_DIR="$RELEASE_BASE_DIR" ;;
-	esac
+		esac
 	[ "$1" ] || RELEASE_DIR="$RELEASE_DIR/$(date  +%Y%m%d_%H%M%S)"
 
 	rm -rf "$RELEASE_DIR"
@@ -65,9 +59,6 @@ build_release()
 				"$RELEASE_DIR/kernel/"
 		fi
 
-		message "Saving kernel files..."
-		cp -rv kernel/.config kernel/System.map kernel/vmlinux \
-			$RK_KERNEL_DTB "$RELEASE_DIR/kernel/"
 
 		if [ -d "$RK_OUTDIR/kernel-modules" ]; then
 			cp -rv $RK_KERNEL_DTB "$RK_OUTDIR/kernel-modules" \

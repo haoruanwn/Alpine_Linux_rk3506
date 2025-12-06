@@ -1,0 +1,23 @@
+{
+  "name": "rk3506-alpine-dev",
+  "dockerComposeFile": ["../docker-compose.yml"],
+  "service": "alpine_rk3506-builder",
+  "workspaceFolder": "/workspace",
+  "shutdownAction": "stopCompose",
+  "remoteUser": "builder",
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "terminal.integrated.shell.linux": "/bin/bash"
+      }
+    }
+  },
+  "postCreateCommand": "sudo chown -R builder:builder /workspace || true",
+  "mounts": [
+    "source=${localEnv:HOME}/.ssh,target=/home/builder/.ssh,type=bind,consistency=cached"
+  ],
+  "containerEnv": {
+    "DEBIAN_FRONTEND": "noninteractive",
+    "TZ": "Asia/Shanghai"
+  }
+}

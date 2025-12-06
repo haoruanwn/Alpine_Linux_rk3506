@@ -1,0 +1,1 @@
+./build.sh kernel 生成boot.img
