@@ -1,7 +1,0 @@
-menu "Example 'HFP CLIENT' Config"
-
-    config HFP_CLIENT_EXAMPLE
-        bool "Demo of hfp client"
-    default n
-
-endmenu

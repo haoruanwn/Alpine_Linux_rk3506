@@ -1,3 +1,0 @@
-#include "base/base.config"
-#include "base/recovery.config"
-#include "chips/rv1126_rv1109_arm.config"

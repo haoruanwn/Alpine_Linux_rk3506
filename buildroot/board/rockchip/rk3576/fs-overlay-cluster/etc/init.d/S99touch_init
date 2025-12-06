@@ -1,6 +1,0 @@
-#!/bin/sh
-
-{
-    sleep 2;
-    insmod /usr/lib/modules/himax_mmi.ko
-} &

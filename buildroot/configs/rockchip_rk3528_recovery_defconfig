@@ -1,3 +1,0 @@
-#include "base/base.config"
-#include "base/recovery.config"
-#include "chips/rk3528_aarch64.config"

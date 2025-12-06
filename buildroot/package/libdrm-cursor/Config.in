@@ -1,6 +1,0 @@
-config BR2_PACKAGE_LIBDRM_CURSOR
-	bool "A hook of drm cursor APIs to fake cursor plane."
-	depends on BR2_PACKAGE_LIBDRM
-	depends on BR2_PACKAGE_HAS_LIBGBM
-	help
-	  A hook of drm cursor APIs to fake cursor plane.

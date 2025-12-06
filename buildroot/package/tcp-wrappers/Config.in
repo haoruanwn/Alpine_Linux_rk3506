@@ -1,6 +1,0 @@
-config BR2_PACKAGE_TCP_WRAPPERS
-	bool "tcp-wrappers"
-	help
-	  TCP/IP daemon wrapper package.
-
-	  http://ftp.porcupine.org/pub/security/index.html

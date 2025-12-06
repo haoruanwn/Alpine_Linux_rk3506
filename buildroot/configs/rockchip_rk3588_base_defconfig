@@ -1,3 +1,0 @@
-#include "base/base.config"
-#include "chips/rk3588_aarch64.config"
-#include "fs/vfat.config"

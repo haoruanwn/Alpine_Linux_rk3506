@@ -1,4 +1,0 @@
-config PKG_CMSIS_RTOS2
-    bool "CMSIS RTOS2 API with RT-Thread porting"
-    default n
-
