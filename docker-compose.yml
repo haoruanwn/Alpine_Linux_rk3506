@@ -15,6 +15,8 @@ services:
     tty: true
     # 网络模式
     network_mode: host
+    # 以特权模式运行
+    privileged: true
     # 挂载卷
     volumes:
       # 将当前整个目录挂载到容器的 /workspace，方便sdk访问config文件夹

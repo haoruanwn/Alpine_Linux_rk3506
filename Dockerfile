@@ -66,6 +66,8 @@ RUN dpkg --add-architecture i386 && \
     bsdmainutils \
     ca-certificates \
     sudo \
+    qemu-user-static \
+    binfmt-support \
     && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
