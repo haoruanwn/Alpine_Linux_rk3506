@@ -16,33 +16,31 @@ clean_hook()
 BUILD_CMDS="recovery"
 build_hook()
 {
-	check_config RK_RECOVERY || false
-
 	message "=========================================="
-	message "          Start building recovery(buildroot)"
+	message "          Skipping Buildroot Recovery     "
 	message "=========================================="
-
-
+	
+	# Determine output directory
 	DST_DIR="$RK_OUTDIR/recovery"
-	IMAGE_DIR="$DST_DIR/images"
+	mkdir -p "$DST_DIR"
 
-	"$RK_SCRIPTS_DIR/mk-buildroot.sh" $RK_RECOVERY_CFG "$IMAGE_DIR"
-
-	"$RK_SCRIPTS_DIR/mk-kernel.sh" recovery-kernel
-
-	"$RK_SCRIPTS_DIR/mk-ramboot.sh" "$DST_DIR" \
-		"$IMAGE_DIR/rootfs.$RK_RECOVERY_INITRD_TYPE" \
-		"$RK_RECOVERY_FIT_ITS" "$RK_OUTDIR/recovery-kernel.img" \
-		"$RK_OUTDIR/recovery-kernel.dtb" \
-		"$RK_OUTDIR/recovery-resource.img"
-
-	if [ "$RK_SECURITY" ]; then
-		"$RK_SCRIPTS_DIR/mk-security.sh" sign recovery \
-			$DST_DIR/ramboot.img $RK_FIRMWARE_DIR
+	# Core logic: use boot.img as fake recovery.img
+	# Check if boot.img exists (normally generated during build_kernel stage)
+	local boot_img="$RK_FIRMWARE_DIR/boot.img"
+	
+	if [ -f "$boot_img" ]; then
+		notice "Nexus: Using boot.img as fake recovery.img..."
+		cp "$boot_img" "$DST_DIR/recovery.img"
 	else
-		ln -rsf "$DST_DIR/ramboot.img" "$RK_FIRMWARE_DIR/recovery.img"
+		# If boot.img doesn't exist, create empty placeholder to prevent errors
+		warning "boot.img not found! Creating empty recovery.img placeholder."
+		dd if=/dev/zero of="$DST_DIR/recovery.img" bs=1M count=16 status=none
 	fi
 
+	# Link to firmware directory for packaging tools
+	ln -rsf "$DST_DIR/recovery.img" "$RK_FIRMWARE_DIR/recovery.img"
+
+	message "Recovery image (fake) generated successfully."
 	finish_build build_recovery
 }
 

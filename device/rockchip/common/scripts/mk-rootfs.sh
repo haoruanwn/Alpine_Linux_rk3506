@@ -32,7 +32,7 @@ build_alpine()
     message "Target RootFS Image: $rootfs_img"
     message "Target RootFS Directory: $rootfs_target"
 
-    mkdir -p "$image_dir" "$rootfs_target"
+    mkdir -p "$image_dir"
     rm -f "$rootfs_img"
 
     # Step 1: Download Alpine Mini RootFS if not present
@@ -48,11 +48,11 @@ build_alpine()
         fi
     fi
 
-    # Step 2: Extract RootFS
+    # Step 2: Extract RootFS with sudo (for proper ownership as root)
     notice "Extracting Alpine RootFS..."
-    rm -rf "$rootfs_target"
+    sudo rm -rf "$rootfs_target"
     mkdir -p "$rootfs_target"
-    if ! tar -xzf "$alpine_tar" -C "$rootfs_target"; then
+    if ! sudo tar -xzf "$alpine_tar" -C "$rootfs_target"; then
         error "Failed to extract Alpine rootfs"
         return 1
     fi
@@ -61,53 +61,50 @@ build_alpine()
     local qemu_bin
     if qemu_bin=$(which qemu-arm-static 2>/dev/null); then
         notice "Found QEMU ARM static: $qemu_bin"
-        mkdir -p "$rootfs_target/usr/bin"
-        cp "$qemu_bin" "$rootfs_target/usr/bin/" 2>/dev/null || true
+        sudo mkdir -p "$rootfs_target/usr/bin"
+        sudo cp "$qemu_bin" "$rootfs_target/usr/bin/" 2>/dev/null || true
     else
         warning "qemu-arm-static not found - chroot configuration will be limited"
         warning "Install qemu-user-static to enable full Alpine customization"
-        # Even without qemu, we can still create a placeholder image
     fi
 
     # Step 4: Try to mount system directories and run setup script
-    if mountpoint -q / 2>/dev/null; then
-        # We're running in a capable environment
-        notice "Mounting system directories for chroot configuration..."
+    notice "Mounting system directories for chroot configuration..."
 
-        # Setup trap to cleanup mounts on exit
-        trap "cleanup_mounts '$rootfs_target'" EXIT
+    # Setup trap to cleanup mounts on exit
+    trap "cleanup_mounts '$rootfs_target'" EXIT
 
-        # Mount required filesystems
-        mount -t proc /proc "$rootfs_target/proc" 2>/dev/null || true
-        mount -t sysfs /sys "$rootfs_target/sys" 2>/dev/null || true
-        mount -o bind /dev "$rootfs_target/dev" 2>/dev/null || true
-        mount -o bind /dev/pts "$rootfs_target/dev/pts" 2>/dev/null || true
+    # Mount required filesystems with sudo
+    sudo mount -t proc /proc "$rootfs_target/proc" 2>/dev/null || true
+    sudo mount -t sysfs /sys "$rootfs_target/sys" 2>/dev/null || true
+    sudo mount --bind /dev "$rootfs_target/dev" 2>/dev/null || true
+    sudo mount --bind /dev/pts "$rootfs_target/dev/pts" 2>/dev/null || true
 
-        # Copy DNS configuration for networking
-        cp /etc/resolv.conf "$rootfs_target/etc/resolv.conf" 2>/dev/null || true
+    # Copy DNS configuration for networking
+    sudo cp /etc/resolv.conf "$rootfs_target/etc/resolv.conf" 2>/dev/null || true
 
-        # Copy setup script
-        if [ -f "$RK_SCRIPTS_DIR/alpine-setup.sh" ]; then
-            mkdir -p "$rootfs_target/tmp"
-            cp "$RK_SCRIPTS_DIR/alpine-setup.sh" "$rootfs_target/tmp/"
-            
-            notice "Running Alpine setup script in chroot environment..."
-            if chroot "$rootfs_target" /bin/sh /tmp/alpine-setup.sh; then
-                notice "Alpine chroot setup completed successfully"
-            else
-                warning "Alpine chroot setup encountered some errors (non-fatal)"
-            fi
-            rm -f "$rootfs_target/tmp/alpine-setup.sh"
+    # Copy setup script and run with sudo chroot
+    if [ -f "$RK_SCRIPTS_DIR/alpine-setup.sh" ]; then
+        sudo mkdir -p "$rootfs_target/tmp"
+        sudo cp "$RK_SCRIPTS_DIR/alpine-setup.sh" "$rootfs_target/tmp/"
+        
+        notice "Running Alpine setup script in chroot environment..."
+        if sudo chroot "$rootfs_target" /bin/sh /tmp/alpine-setup.sh; then
+            notice "Alpine chroot setup completed successfully"
+        else
+            warning "Alpine chroot setup encountered some errors (non-fatal)"
         fi
-
-        # Cleanup qemu binary
-        rm -f "$rootfs_target/usr/bin/qemu-arm-static" 2>/dev/null || true
-
-        # Cleanup will be called by trap
+        sudo rm -f "$rootfs_target/tmp/alpine-setup.sh"
     else
-        notice "Skipping chroot configuration (not in capable environment)"
-        notice "Creating basic Alpine rootfs placeholder..."
+        warning "alpine-setup.sh not found in $RK_SCRIPTS_DIR"
     fi
+
+    # Cleanup qemu binary and mounts
+    sudo rm -f "$rootfs_target/usr/bin/qemu-arm-static" 2>/dev/null || true
+    sudo umount "$rootfs_target/dev/pts" 2>/dev/null || true
+    sudo umount "$rootfs_target/dev" 2>/dev/null || true
+    sudo umount "$rootfs_target/sys" 2>/dev/null || true
+    sudo umount "$rootfs_target/proc" 2>/dev/null || true
 
     # Step 5: Create placeholder image(s)
     case "$fs_type" in
