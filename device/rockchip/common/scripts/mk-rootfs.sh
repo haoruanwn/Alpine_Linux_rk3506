@@ -30,8 +30,8 @@ build_alpine()
     local fs_type="${RK_ROOTFS_TYPE:-ubi}"
     local rootfs_img="$image_dir/rootfs.$fs_type"
     local rootfs_target="$RK_OUTDIR/alpine/target"
-    # 这里根据环境选择了 armv7
-    local alpine_url="https://mirrors.aliyun.com/alpine/v3.19/releases/armv7/alpine-minirootfs-3.19.1-armv7.tar.gz"
+    # 找到阿里云镜像的最新稳定版本
+    local alpine_url="https://mirrors.aliyun.com/alpine/v3.23/releases/armv7/alpine-minirootfs-3.23.0-armv7.tar.gz"
     local alpine_tar="$RK_SDK_DIR/alpine/alpine-minirootfs.tar.gz"
 
     message "Target RootFS Image: $rootfs_img"
@@ -45,7 +45,7 @@ build_alpine()
         notice "Downloading Alpine Mini RootFS (armv7)..."
         if ! wget -q -O "$alpine_tar" "$alpine_url"; then
             warning "Failed to download from Aliyun mirror, trying primary CDN..."
-            alpine_url="https://dl-cdn.alpinelinux.org/alpine/v3.19/releases/armv7/alpine-minirootfs-3.19.1-armv7.tar.gz"
+            alpine_url="https://dl-cdn.alpinelinux.org/alpine/v3.23/releases/armv7/alpine-minirootfs-3.23.0-armv7.tar.gz"
             if ! wget -q -O "$alpine_tar" "$alpine_url"; then
                 error "Failed to download Alpine rootfs from both mirrors"
                 return 1
@@ -89,20 +89,47 @@ build_alpine()
     sudo mount --bind /dev/pts "$rootfs_target/dev/pts" 2>/dev/null || true
     sudo cp /etc/resolv.conf "$rootfs_target/etc/resolv.conf" 2>/dev/null || true
 
-    # Run setup script
-    if [ -f "$RK_SCRIPTS_DIR/alpine-setup.sh" ]; then
-        sudo mkdir -p "$rootfs_target/tmp"
-        sudo cp "$RK_SCRIPTS_DIR/alpine-setup.sh" "$rootfs_target/tmp/"
-        
-        notice "Running Alpine setup script in chroot environment..."
-        if sudo chroot "$rootfs_target" /bin/sh /tmp/alpine-setup.sh; then
-            notice "Alpine chroot setup completed successfully"
-        else
-            warning "Alpine chroot setup encountered some errors (non-fatal)"
-        fi
-        sudo rm -f "$rootfs_target/tmp/alpine-setup.sh"
+    # ==========================================
+    # Nexus: 动态选择板级配置脚本 (Dynamic Board Setup)
+    # ==========================================
+    
+    # 1. 定义脚本路径
+    # 默认通用脚本
+    local GENERIC_SCRIPT="$RK_SCRIPTS_DIR/alpine-setup.sh"
+    # 板级专用脚本 - 优先查找 .chips 目录下的脚本
+    local CHIP_SETUP_DIR="$RK_CHIPS_DIR/$RK_CHIP/alpine"
+    local BOARD_SCRIPT="$CHIP_SETUP_DIR/alpine-setup-${RK_DEFCONFIG}.sh"
+    
+    local TARGET_SCRIPT=""
+
+    # 2. 决策逻辑
+    if [ -f "$BOARD_SCRIPT" ]; then
+        notice "Found board-specific setup script: $(basename "$BOARD_SCRIPT")"
+        TARGET_SCRIPT="$BOARD_SCRIPT"
+    elif [ -f "$GENERIC_SCRIPT" ]; then
+        notice "Using generic setup script: alpine-setup.sh"
+        TARGET_SCRIPT="$GENERIC_SCRIPT"
     else
-        warning "alpine-setup.sh not found in $RK_SCRIPTS_DIR"
+        warning "No setup script found (checked $BOARD_SCRIPT and $GENERIC_SCRIPT). Skipping Alpine customization."
+    fi
+
+    # 3. 执行脚本
+    if [ -n "$TARGET_SCRIPT" ]; then
+        # 拷贝选中的脚本到 rootfs 的 /tmp 目录，并统一命名为 setup.sh 以便 chroot 内部调用
+        sudo mkdir -p "$rootfs_target/tmp"
+        sudo cp "$TARGET_SCRIPT" "$rootfs_target/tmp/setup.sh"
+        
+        notice "Running setup script in chroot environment: $(basename "$TARGET_SCRIPT")"
+        
+        # 传递 RK_DEFCONFIG 给脚本，以便脚本内部也可以做判断
+        if sudo chroot "$rootfs_target" /usr/bin/env BOARD_CONFIG="$RK_DEFCONFIG" /bin/sh /tmp/setup.sh; then
+            notice "Alpine setup completed successfully"
+        else
+            warning "Alpine setup script encountered some errors (non-fatal)"
+        fi
+        
+        # 清理
+        sudo rm -f "$rootfs_target/tmp/setup.sh"
     fi
 
     # ==========================================
