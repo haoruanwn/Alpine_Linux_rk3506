@@ -13,7 +13,7 @@
 	model = "Vanxoak HD-RK3506-EVM V1 Board";
 	compatible = "rockchip,rk3506-evm-v1", "rockchip,rk3506";
 	
-  // LED
+    // LED
 	leds {
 		compatible = "gpio-leds";
 		status = "okay";
@@ -30,7 +30,7 @@
 		#size-cells = <1>;
 		ranges;
 
-		drm_logo: drm-logo@400000 {
+		drm_logo_vx: drm-logo@400000 {
 			compatible = "rockchip,drm-logo";
 			reg = <0x400000 0x100000>; 
 		};
@@ -39,6 +39,22 @@
 	chosen {
 		bootargs = "earlycon=uart8250,mmio32,0xff0a0000 console=ttyFIQ0 ubi.mtd=5 root=ubi0:rootfs rw rootfstype=ubifs rootwait snd_aloop.index=7 snd_aloop.use_raw_jiffies=1";
 	};
+};
+
+&pinctrl {
+    sdmmc {
+        sdmmc_det_pins: sdmmc-det-pins {
+            rockchip,pins =
+                <0 RK_PB0 1 &pcfg_pull_up_drv_level_3>;
+        };
+    };
+    
+    sai3_idle {
+        sai3_sclk_idle_pins: sai3-sclk-idle-pins {
+            rockchip,pins =
+                <1 RK_PC2 1 &pcfg_pull_none>;
+        };
+    };
 };
 
 &tsadc {

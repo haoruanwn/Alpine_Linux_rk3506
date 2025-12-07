@@ -118,7 +118,7 @@
 
 &display_subsystem {
 	status = "okay";
-	logo-memory-region = <&drm_logo>;
+	logo-memory-region = <&drm_logo_vx>;
 };
 
 &vop {
