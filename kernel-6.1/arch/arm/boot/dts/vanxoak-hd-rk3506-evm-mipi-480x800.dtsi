@@ -1,0 +1,178 @@
+#include <dt-bindings/display/drm_mipi_dsi.h>
+#include <dt-bindings/input/rk-input.h>
+#include <dt-bindings/suspend/rockchip-rk3506.h>
+
+&dsi {
+	status = "okay";
+	rockchip,lane-rate = <1000>;
+	dsi_panel: panel@0 {
+		status = "okay";
+		compatible = "simple-panel-dsi";
+        reset-gpios = <&gpio1 RK_PD3 GPIO_ACTIVE_LOW>;
+		reg = <0>;
+		backlight = <&backlight>;
+		reset-delay-ms = <30>;
+		enable-delay-ms = <100>;
+		prepare-delay-ms = <20>;
+		unprepare-delay-ms = <20>;
+		disable-delay-ms = <20>;
+		init-delay-ms = <120>;
+		dsi,flags = <(MIPI_DSI_MODE_VIDEO | MIPI_DSI_MODE_VIDEO_BURST |
+			      MIPI_DSI_MODE_LPM | MIPI_DSI_MODE_NO_EOT_PACKET)>;
+		dsi,format = <MIPI_DSI_FMT_RGB888>;
+		dsi,lanes  = <2>;
+		panel-init-sequence = [
+			// init code
+			05 78 01 01
+			05 78 01 11
+			39 00 06 FF 77 01 00 00 11
+			15 00 02 D1 11
+			15 00 02 55 B0 // 80 90 b0
+			39 00 06 FF 77 01 00 00 10
+			39 00 03 C0 63 00
+			39 00 03 C1 09 02
+			39 00 03 C2 37 08
+			15 00 02 C7 00 // x-dir rotate 0:0x00,rotate 180:0x04
+			15 00 02 CC 38
+			39 00 11 B0 00 11 19 0C 10 06 07 0A 09 22 04 10 0E 28 30 1C
+			39 00 11 B1 00 12 19 0D 10 04 06 07 08 23 04 12 11 28 30 1C
+			39 00 06 FF 77 01 00 00 11 // enable  bk fun of  command 2  BK1
+			15 00 02 B0 4D
+			15 00 02 B1 60 // 0x56  0x4a  0x5b
+			15 00 02 B2 07
+			15 00 02 B3 80
+			15 00 02 B5 47
+			15 00 02 B7 8A
+			15 00 02 B8 21
+			15 00 02 C1 78
+			15 00 02 C2 78
+			15 64 02 D0 88
+			39 00 04 E0 00 00 02
+			39 00 0C E1 01 A0 03 A0 02 A0 04 A0 00 44 44
+			39 00 0D E2 00 00 00 00 00 00 00 00 00 00 00 00
+			39 00 05 E3 00 00 33 33
+			39 00 03 E4 44 44
+			39 00 11 E5 01 26 A0 A0 03 28 A0 A0 05 2A A0 A0 07 2C A0 A0
+			39 00 05 E6 00 00 33 33
+			39 00 03 E7 44 44
+			39 00 11 E8 02 26 A0 A0 04 28 A0 A0 06 2A A0 A0 08 2C A0 A0
+			39 00 08 EB 00 01 E4 E4 44 00 40
+			39 00 11 ED FF F7 65 4F 0B A1 CF FF FF FC 1A B0 F4 56 7F FF
+			39 00 06 FF 77 01 00 00 00
+			15 00 02 36 00 //U&D  Y-DIR rotate 0:0x00,rotate 180:0x10
+			15 00 02 3A 55
+			05 78 01 11
+			05 14 01 29
+		];
+
+		panel-exit-sequence = [
+			05 00 01 28
+			05 00 01 10
+		];
+
+		disp_timings0: display-timings {
+			native-mode = <&dsi_timing0>;
+			dsi_timing0: timing0 {
+				clock-frequency = <27000000>;
+				hactive = <480>;   	
+				vactive = <800>;   	 
+				hfront-porch = <32>;  
+				hsync-len = <4>;   	 
+				hback-porch = <32>;  
+				vfront-porch = <9>;  
+				vsync-len = <4>;     
+				vback-porch = <3>;   
+				hsync-active = <0>;
+				vsync-active = <0>;
+				de-active = <0>;
+				pixelclk-active = <0>;
+			};
+		};
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+				panel_in_dsi: endpoint {
+					remote-endpoint = <&dsi_out_panel>;
+					status = "okay";
+				};
+			};
+		};
+	};
+
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@1 {
+			reg = <1>;
+			dsi_out_panel: endpoint {
+				remote-endpoint = <&panel_in_dsi>;
+			};
+		};
+	};
+};
+
+&display_subsystem {
+	status = "okay";
+	logo-memory-region = <&drm_logo>;
+};
+
+&vop {
+	status = "okay";
+};
+
+&dsi_in_vop {
+	status = "okay";
+};
+
+&rgb_in_vop {
+	status = "disabled";
+};
+
+&route_dsi {
+	status = "okay";
+	//logo,rotate = <3>;
+};
+
+&route_rgb {
+	status = "disabled";
+};
+
+&dsi_dphy {
+	status = "okay";
+};
+
+&backlight {
+	compatible = "pwm-backlight";
+	pwms = <&pwm0_4ch_2 0 25000 0>;
+	status = "okay";
+};
+
+// TOUCH
+&i2c2 {
+	status = "okay";
+	 pinctrl-0 = <&rm_io4_i2c2_scl &rm_io5_i2c2_sda>;
+
+	myts@38 {
+		status = "okay";
+		compatible = "hyn,cst128a";
+		reg = <0x38>;
+		tp-size = <89>;
+		max-x = <480>;
+		max-y = <800>;
+		touch-gpio = <&gpio0 RK_PB1 IRQ_TYPE_LEVEL_LOW>;
+		reset-gpio = <&gpio1 RK_PB4 GPIO_ACTIVE_HIGH>;
+	};
+};
+
+&pinctrl {
+	myts{
+		touch_gpio: touch-gpio {
+			rockchip,pins = <0 RK_PB1 RK_FUNC_GPIO &pcfg_pull_up>;
+		};
+	};
+};

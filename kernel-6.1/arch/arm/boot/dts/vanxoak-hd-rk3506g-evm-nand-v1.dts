@@ -1,0 +1,80 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Copyright (c) 2024 Rockchip Electronics Co., Ltd.
+ */
+
+/dts-v1/;
+
+#include "rk3506.dtsi"
+#include "vanxoak-hd-rk3506-evm-v1.dtsi"
+#include "vanxoak-hd-rk3506-evm-mipi-480x800.dtsi"
+
+/ {
+	model = "Vanxoak HD-RK3506-EVM V1 Board";
+	compatible = "rockchip,rk3506-evm-v1", "rockchip,rk3506";
+	
+  // LED
+	leds {
+		compatible = "gpio-leds";
+		status = "okay";
+		heart_led {
+			label = "run";
+			gpios = <&gpio1 RK_PB3 GPIO_ACTIVE_LOW>;
+			linux,default-trigger = "heartbeat";
+			default-state = "off";
+		};
+	};
+
+	reserved-memory {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges;
+
+		drm_logo: drm-logo@400000 {
+			compatible = "rockchip,drm-logo";
+			reg = <0x400000 0x100000>; 
+		};
+	};
+
+	chosen {
+		bootargs = "earlycon=uart8250,mmio32,0xff0a0000 console=ttyFIQ0 ubi.mtd=5 root=ubi0:rootfs rw rootfstype=ubifs rootwait snd_aloop.index=7 snd_aloop.use_raw_jiffies=1";
+	};
+};
+
+&tsadc {
+	status = "okay";
+};
+
+&saradc {
+	vref-supply = <&vcc_1v8>;
+	status = "okay";
+};
+
+&uart1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&rm_io16_uart1_rx &rm_io17_uart1_tx>;
+	status = "okay";
+};
+
+&uart2 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&rm_io0_uart2_rx &rm_io2_uart2_tx>;
+	status = "okay";
+};
+
+&uart3 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&rm_io15_uart3_rx &rm_io14_uart3_tx>;
+	status = "okay";
+};
+
+&uart4 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&rm_io30_uart4_rx &rm_io31_uart4_tx>;
+	status = "disabled";
+};
+
+
+
+
+
