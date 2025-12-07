@@ -194,11 +194,29 @@ build_alpine()
     # ==========================================
     notice "Packing Alpine RootFS into UBI image..."
 
-    # 1. 定义 NAND 参数 (根据你的 log 中 oem 分区的参数提取)
+    # 1. 定义 NAND 参数 
     # LEB size: 126976, PEB size: 131072, min. I/O: 2048
     local LEB_SIZE=126976
     local MIN_IO_SIZE=2048
     local MAX_LEB_CNT=2048 # 给 rootfs 足够大的空间
+
+    # 指定工具路径
+    # 从原厂buildroot sdk中提取的mkfs.ubifs和ubinize
+    # RK_COMMON_DIR 对应 device/rockchip/common
+    local TOOLS_DIR="$RK_COMMON_DIR/tools"
+    local MKFS_UBIFS="$TOOLS_DIR/mkfs.ubifs"
+    local UBINIZE="$TOOLS_DIR/ubinize"
+
+    # 检查工具是否存在，如果不存在则报错
+    if [ ! -x "$MKFS_UBIFS" ] || [ ! -x "$UBINIZE" ]; then
+        error "Vendor tools not found in $TOOLS_DIR!"
+        error "Please copy mkfs.ubifs and ubinize from vendor SDK."
+        return 1
+    fi
+    
+    notice "Using Vendor Tools:"
+    notice "  - $MKFS_UBIFS"
+    notice "  - $UBINIZE"
 
     # 2. 生成 ubinize.cfg 配置文件
     cat > "$image_dir/ubinize.cfg" <<EOF
@@ -212,12 +230,16 @@ vol_flags=autoresize
 EOF
 
     # 3. 制作 UBIFS (文件系统层)
-    # 注意：需要 sudo 才能读取 rootfs_target 中的 root 权限文件
-    notice "Running mkfs.ubifs..."
-    if sudo mkfs.ubifs -r "$rootfs_target" \
+    # 使用原厂工具 + 强制 LZO 压缩
+    # -x lzo: 强制使用 LZO 压缩 
+    # -F: space-fixup 
+    notice "Running mkfs.ubifs (LZO compression)..."
+    if sudo $MKFS_UBIFS -r "$rootfs_target" \
         -m $MIN_IO_SIZE \
         -e $LEB_SIZE \
         -c $MAX_LEB_CNT \
+        -x lzo \
+        -F \
         -o "$image_dir/rootfs.ubifs"; then
         notice "UBIFS generated successfully."
     else
@@ -227,7 +249,7 @@ EOF
 
     # 4. 制作 UBI 镜像 (Flash 层，包含磨损均衡头)
     notice "Running ubinize..."
-    if ubinize -o "$rootfs_img" \
+    if $UBINIZE -o "$rootfs_img" \
         -m $MIN_IO_SIZE \
         -p 128KiB \
         "$image_dir/ubinize.cfg"; then
