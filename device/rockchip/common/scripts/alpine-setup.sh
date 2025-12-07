@@ -70,21 +70,16 @@ EOF
 # 启用网络服务
 rc-update add networking boot
 
-# ==========================================
-# Nexus: 修复 TTY 刷屏问题 (Fix TTY Spam)
-# ==========================================
 echo "Fixing inittab for Embedded System..."
 
 # 1. 备份原始 inittab
 cp /etc/inittab /etc/inittab.bak
 
 # 2. 清理 tty1-tty6 的配置
-# 这些是给 PC 用的虚拟终端，嵌入式板子不需要
 sed -i '/tty[1-6]::respawn/d' /etc/inittab
 
 # 3. 确保串口 (ttyFIQ0) 存在并允许 root 自动登录
 # 注意：Rockchip 默认串口通常是 ttyFIQ0 或 ttyS2
-# 我们先删除旧的串口配置，防止重复
 sed -i '/ttyFIQ0/d' /etc/inittab
 sed -i '/ttyS2/d' /etc/inittab
 

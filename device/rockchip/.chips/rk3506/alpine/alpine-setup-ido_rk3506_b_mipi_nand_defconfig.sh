@@ -1,6 +1,6 @@
 #!/bin/sh
 # device/rockchip/.chips/rk3506/alpine/alpine-setup-ido_rk3506_b_mipi_nand_defconfig.sh
-# 基于用户提供的原始稳定版本修改 - 增加自动加载驱动和双网口支持
+# 参考自：「当幸狐来敲门」适配Alpine Linux下篇--适配Alpine Linux的详细步骤 https://bbs.eeworld.com.cn/thread-1259967-1-1.html
 
 echo "=== IDO Board Setup: Starting ==="
 
@@ -10,14 +10,11 @@ sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
 apk update
 
 # 2. 安装基础软件
-# Nexus注：增加了 dhcpcd (比udhcpc更稳定) 和 mdev-conf (提供mdev命令用于扫描硬件)
 echo "Installing base packages..."
 apk add openrc util-linux btop bash bash-completion openssh tzdata dhcpcd mdev-conf
 
 # 3. 配置 OpenRC 和 串口
 echo "Configuring OpenRC..."
-# Nexus注：将文件系统挂载改为 sysinit 级别，这是 OpenRC 的标准做法，
-# 能解决你之前遇到的 "needs non existent service dev" 错误
 rc-update add devfs sysinit
 rc-update add procfs sysinit
 rc-update add sysfs sysinit
@@ -27,7 +24,7 @@ rc-update add mdev sysinit
 # 配置串口 ttyFIQ0 自动登录
 echo "Configuring Serial Console..."
 echo "ttyFIQ0" >> /etc/securetty
-# 修改 /etc/inittab (清理无效的 tty1-6)
+# 修改 /etc/inittab 
 sed -i '/tty1/d' /etc/inittab
 sed -i '/tty2/d' /etc/inittab
 sed -i '/tty3/d' /etc/inittab
@@ -37,7 +34,7 @@ sed -i '/tty6/d' /etc/inittab
 # 添加 ttyFIQ0
 echo "ttyFIQ0::respawn:/sbin/agetty --autologin root ttyFIQ0 vt100" >> /etc/inittab
 
-# 4. 配置网络 (Nexus修改：加入 eth1)
+# 4. 配置网络 
 echo "Configuring Network..."
 mkdir -p /etc/network
 cat > /etc/network/interfaces <<EOF
@@ -54,10 +51,9 @@ iface eth1 inet dhcp
 EOF
 rc-update add networking boot
 
-# 5. 配置驱动加载策略 (Nexus 修正: 静态 + 动态双保险)
+# 5. 配置驱动加载策略 
 echo "Configuring Kernel Module Loading..."
 
-# A. 【关键修复】静态预加载：解决 eth0 启动时不存在的问题
 # 将核心驱动写入 /etc/modules，确保在 networking 服务启动前，网卡已经就绪
 cat > /etc/modules <<EOF
 # --- Ethernet (RK3506) ---
@@ -78,7 +74,7 @@ EOF
 # 启用 modules 服务 (它会在 boot 阶段极早运行)
 rc-update add modules boot
 
-# B. 动态热插拔：用于启动后插入的设备 (如 USB Wi-Fi)
+# B. 动态热插拔：用于启动后插入的设备
 # 保持之前的 mdev 扫描逻辑，作为补充
 mkdir -p /etc/local.d
 cat > /etc/local.d/load_modules.start << 'EOF'
